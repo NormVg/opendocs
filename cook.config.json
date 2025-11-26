@@ -1,0 +1,24 @@
+{
+    "name": "opendocs",
+    "author": "cook",
+    "stir": true,
+    "cmd": {
+        "serve": [
+            "pnpm run dev"
+        ],
+        "build": [
+            "pnpm install"
+        ],
+        "clean": [
+            "rm -rf node_modules"
+        ]
+    },
+    "template": {
+        "name": "",
+        "category": "",
+        "date": "",
+        "author": "",
+        "stack": [],
+        "github": ""
+    }
+}
