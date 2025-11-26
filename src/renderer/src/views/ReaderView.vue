@@ -3,6 +3,7 @@ import { ref, onMounted, watch, nextTick, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import VuePdfEmbed from 'vue-pdf-embed'
 import ReaderToolbar from '../components/ReaderToolbar.vue'
+import AIChatSidebar from '../components/AIChatSidebar.vue'
 import * as pdfjsLib from 'pdfjs-dist'
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
@@ -24,6 +25,17 @@ const isStarred = ref(false)
 const currentFilePath = ref(null)
 const pdfBufferCopy = ref(null) // Store a copy of the buffer for search
 const highlightPositions = ref([])
+const isSidebarCollapsed = ref(false)
+const isAiChatOpen = ref(false)
+
+const toggleSidebar = () => {
+  isSidebarCollapsed.value = !isSidebarCollapsed.value
+}
+
+const toggleAiChat = () => {
+  isAiChatOpen.value = !isAiChatOpen.value
+}
+
 const zoomLevel = ref(1) // 1 = 100%
 
 const zoomIn = () => {
@@ -339,6 +351,13 @@ onUnmounted(() => {
 // Watch for path changes in route query
 watch(() => route.query.path, (newPath) => {
   if (newPath) {
+    if (route.query.title) {
+      title.value = route.query.title
+    } else {
+      // Fallback to filename if title is missing
+      const fileName = newPath.split(/[/\\]/).pop()
+      title.value = fileName
+    }
     loadPdfFromPath(newPath)
   }
 }, { immediate: true })
@@ -346,32 +365,41 @@ watch(() => route.query.path, (newPath) => {
 
 <template>
   <div class="reader-layout">
+    <ReaderSidebar
+      :collapsed="isSidebarCollapsed"
+      @toggle="toggleSidebar"
+      @open-file="handleOpenFile"
+    />
     <div class="main-content">
       <ReaderToolbar
         :title="title"
-        :currentPage="currentPage"
-        :totalPages="pageCount"
-        :searchResultCount="searchResults.length"
-        :currentResultIndex="currentSearchIndex"
-        :isStarred="isStarred"
+        :current-page="currentPage"
+        :total-pages="pageCount"
+        :search-result-count="searchResults.length"
+        :current-result-index="currentSearchIndex"
+        :is-starred="isStarred"
+        :is-ai-chat-open="isAiChatOpen"
         @search="handleSearch"
         @next-result="nextSearchResult"
         @previous-result="previousSearchResult"
-        @toggle-bookmark="toggleBookmark"
+        @toggle-bookmark="toggleStarred"
+        @toggle-ai-chat="toggleAiChat"
       />
+      <div class="reader-content">
+        <AIChatSidebar :visible="isAiChatOpen" @close="isAiChatOpen = false" />
 
-      <div class="pdf-container" ref="pdfContainer">
-        <div v-if="isLoading" class="loading-indicator">
-          <p>Loading PDF...</p>
-        </div>
-        <VuePdfEmbed
-          v-else-if="pdfSource"
-          :source="pdfSource"
-          @loaded="handleDocumentLoad"
-          @loading-failed="handleLoadingFailed"
-          class="pdf-viewer"
-          :style="{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }"
-        />
+        <div class="pdf-container" ref="pdfContainer">
+          <div v-if="isLoading" class="loading-indicator">
+            <p>Loading PDF...</p>
+          </div>
+          <VuePdfEmbed
+            v-else-if="pdfSource"
+            :source="pdfSource"
+            @loaded="handleDocumentLoad"
+            @loading-failed="handleLoadingFailed"
+            class="pdf-viewer"
+            :style="{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }"
+          />
         <div v-else class="empty-state">
           <p>No document loaded</p>
         </div>
@@ -410,6 +438,7 @@ watch(() => route.query.path, (newPath) => {
         </div>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
@@ -428,6 +457,13 @@ watch(() => route.query.path, (newPath) => {
   height: 100%;
   overflow: hidden;
   position: relative;
+}
+
+.reader-content {
+  flex: 1;
+  display: flex;
+  position: relative;
+  overflow: hidden;
 }
 
 .pdf-container {

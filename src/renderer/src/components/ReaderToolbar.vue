@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { ChevronLeft, ChevronRight, Search, Bookmark, MessageSquare, X } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, Search, Bookmark, Sparkles, X } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 
 const props = defineProps({
@@ -27,10 +27,14 @@ const props = defineProps({
   isStarred: {
     type: Boolean,
     default: false
+  },
+  isAiChatOpen: {
+    type: Boolean,
+    default: false
   }
 })
 
-const emit = defineEmits(['search', 'next-result', 'previous-result', 'toggle-bookmark'])
+const emit = defineEmits(['search', 'next-result', 'previous-result', 'toggle-bookmark', 'toggle-ai-chat'])
 
 const router = useRouter()
 const isSearchOpen = ref(false)
@@ -95,8 +99,8 @@ const handleSearch = () => {
         <button class="icon-btn" @click="$emit('toggle-bookmark')" :class="{ active: isStarred }">
           <Bookmark :size="18" :fill="isStarred ? 'currentColor' : 'none'" />
         </button>
-        <button class="icon-btn">
-          <MessageSquare :size="18" />
+        <button class="icon-btn" @click="$emit('toggle-ai-chat')" :class="{ active: isAiChatOpen }">
+          <Sparkles :size="18" :fill="isAiChatOpen ? 'currentColor' : 'none'" />
         </button>
         <button class="icon-btn" @click="toggleSearch">
           <Search :size="18" />
@@ -170,7 +174,7 @@ const handleSearch = () => {
   transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
-.icon-btn:hover {
+.icon-btn:hover, .icon-btn.active {
   background-color: var(--color-bg-hover);
   color: var(--color-text-primary);
 }
