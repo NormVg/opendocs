@@ -432,6 +432,29 @@ const handleRequestRange = async ({ start, end }) => {
   }
 }
 
+const handleRequestFullPdf = async () => {
+  if (!pdfDocument.value || !aiSidebar.value) return
+
+  let combinedText = ''
+  // Show loading state in sidebar if possible, or just wait
+  // Ideally we'd show a toast, but for now we'll just process
+
+  try {
+    for (let i = 1; i <= pageCount.value; i++) {
+      const text = await extractTextFromPage(pdfDocument.value, i)
+      combinedText += `[Page ${i}]\n${text}\n\n`
+    }
+
+    aiSidebar.value.addContextItem({
+      type: 'file',
+      label: 'Full Document',
+      content: combinedText
+    })
+  } catch (error) {
+    console.error('Error extracting full PDF text:', error)
+  }
+}
+
 const handleOpenFile = (path) => {
   // Update route to reflect new file
   // This will trigger the watcher on route.query.path
@@ -470,6 +493,7 @@ const handleOpenFile = (path) => {
       @close="toggleAiChat"
       @request-context-current="handleRequestCurrentPage"
       @request-context-range="handleRequestRange"
+      @request-context-full="handleRequestFullPdf"
       ref="aiSidebar"
     />
 
@@ -587,6 +611,23 @@ const handleOpenFile = (path) => {
 
 .pdf-container.is-dragging {
   cursor: grabbing;
+}
+
+.transform-wrap.pdf-viewer {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px; /* Space between pages */
+}
+
+/* Rounded corners for PDF pages */
+.pdf-viewer :deep(canvas),
+.pdf-viewer :deep(img),
+.pdf-viewer :deep(.vue-pdf-embed__page) {
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
 }
 
 .transform-wrapper {

@@ -1,12 +1,21 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChevronLeft, Moon, Sun, Key, Trash2, Info } from 'lucide-vue-next'
+import { ChevronLeft, Moon, Sun, Key, Trash2, Info, Plus, Server } from 'lucide-vue-next'
 
 const router = useRouter()
 const isDarkMode = ref(false)
 const apiKey = ref('')
 const appVersion = '1.0.0'
+
+// Model Management
+const models = ref([
+  { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite' },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
+])
+const newModelId = ref('')
+const newModelName = ref('')
 
 onMounted(() => {
   // Load dark mode state
@@ -24,7 +33,40 @@ onMounted(() => {
   if (savedKey) {
     apiKey.value = savedKey
   }
+
+  // Load Models
+  const savedModels = localStorage.getItem('opendocs-models')
+  if (savedModels) {
+    try {
+      models.value = JSON.parse(savedModels)
+    } catch (e) {
+      console.error('Failed to parse models', e)
+    }
+  }
 })
+
+const saveModels = () => {
+  localStorage.setItem('opendocs-models', JSON.stringify(models.value))
+}
+
+const addModel = () => {
+  if (newModelId.value && newModelName.value) {
+    models.value.push({
+      id: newModelId.value,
+      name: newModelName.value
+    })
+    saveModels()
+    newModelId.value = ''
+    newModelName.value = ''
+  }
+}
+
+const removeModel = (index) => {
+  if (confirm('Remove this model?')) {
+    models.value.splice(index, 1)
+    saveModels()
+  }
+}
 
 const goBack = () => {
   router.back()
@@ -109,6 +151,51 @@ const clearHistory = () => {
         </div>
       </section>
 
+      <!-- Models Section -->
+      <section class="settings-section">
+        <h2 class="section-title">Models</h2>
+        <div class="setting-item column">
+          <div class="setting-info">
+            <div class="icon-wrapper">
+              <Server :size="20" />
+            </div>
+            <div class="text-wrapper">
+              <span class="setting-label">AI Models</span>
+              <span class="setting-desc">Manage available models for chat</span>
+            </div>
+          </div>
+
+          <div class="models-list">
+            <div v-for="(model, index) in models" :key="index" class="model-item">
+              <div class="model-info">
+                <span class="model-name">{{ model.name }}</span>
+                <span class="model-id">{{ model.id }}</span>
+              </div>
+              <button class="icon-btn-danger" @click="removeModel(index)">
+                <Trash2 :size="16" />
+              </button>
+            </div>
+          </div>
+
+          <div class="add-model-form">
+            <input
+              v-model="newModelName"
+              placeholder="Model Name (e.g. Gemini Pro)"
+              class="settings-input"
+            />
+            <input
+              v-model="newModelId"
+              placeholder="Model ID (e.g. gemini-1.5-pro)"
+              class="settings-input"
+            />
+            <button class="btn-primary" @click="addModel" :disabled="!newModelId || !newModelName">
+              <Plus :size="16" />
+              <span>Add</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
       <!-- Data Section -->
       <section class="settings-section">
         <h2 class="section-title">Data</h2>
@@ -147,7 +234,8 @@ const clearHistory = () => {
 
 <style scoped>
 .settings-container {
-  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
   background-color: var(--color-bg);
   padding: var(--space-xl);
   display: flex;
@@ -167,10 +255,15 @@ const clearHistory = () => {
 .back-btn {
   position: absolute;
   left: -48px;
-  padding: 8px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 50%;
   color: var(--color-text-secondary);
   transition: all var(--transition-fast);
+  padding: 0;
 }
 
 .back-btn:hover {
@@ -333,11 +426,85 @@ const clearHistory = () => {
 }
 
 /* Dark Mode Overrides for specific elements */
-:global(body.dark-mode) .toggle-thumb {
-  background-color: #111; /* Dark thumb on light track */
-}
-
 :global(body.dark-mode) .toggle-switch.active .toggle-thumb {
   background-color: white; /* Light thumb on dark track */
+}
+
+/* Models Section Styles */
+.models-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.model-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--color-bg-hover);
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+}
+
+.model-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.model-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.model-id {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  font-family: monospace;
+}
+
+.icon-btn-danger {
+  color: var(--color-text-tertiary);
+  padding: 6px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn-danger:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.add-model-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.btn-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--color-text-primary);
+  color: var(--color-bg);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: opacity 0.2s;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

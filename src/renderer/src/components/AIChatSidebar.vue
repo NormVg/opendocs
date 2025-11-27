@@ -16,7 +16,10 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'request-context-current', 'request-context-range'])
+const emit = defineEmits(['close', 'request-context-current', 'request-context-range', 'request-context-full'])
+
+// ... (existing code)
+
 
 const md = new MarkdownIt({
   html: true,
@@ -45,14 +48,27 @@ const currentChatId = ref(null)
 const showHistory = ref(false)
 const selectedModel = ref('gemini-2.0-flash-lite')
 
-const models = [
+const models = ref([
   { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite' },
   { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
   { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
-]
+])
 
-// Load history on mount
+// Load history and models on mount
 onMounted(() => {
+  // Load models
+  const savedModels = localStorage.getItem('opendocs-models')
+  if (savedModels) {
+    try {
+      models.value = JSON.parse(savedModels)
+    } catch (e) {
+      console.error('Failed to parse models', e)
+    }
+  } else {
+    // Save defaults if nothing exists
+    localStorage.setItem('opendocs-models', JSON.stringify(models.value))
+  }
+
   const saved = localStorage.getItem('opendocs-chat-history')
   if (saved) {
     try {
@@ -150,6 +166,11 @@ const requestRange = () => {
   }
 }
 
+const requestFullPdf = () => {
+  emit('request-context-full')
+  showContextMenu.value = false
+}
+
 // Exposed method for parent to add context
 const addContextItem = (item) => {
   // Check for duplicates
@@ -228,7 +249,7 @@ const sendMessage = () => {
 
   const userContent = inputQuery.value
   inputQuery.value = ''
-  // contextItems.value = [] // Keep context items until manually removed
+  saveChat() // Save after user message
 
   // Prepare AI message placeholder
   const aiMsgId = userMsgId + 1
@@ -267,14 +288,17 @@ const sendMessage = () => {
       const aiMsg = messages.value.find(m => m.id === aiMsgId)
       if (aiMsg) {
         aiMsg.isStreaming = false
+        saveChat() // Save after AI response
       }
     },
     (error) => {
       const aiMsg = messages.value.find(m => m.id === aiMsgId)
       if (aiMsg) {
-        aiMsg.content += `\n\n*Error: ${error}*`
+        aiMsg.content = `⚠️ **Error**\n\n${error}`
         aiMsg.isStreaming = false
+        aiMsg.isError = true
         scrollToBottom()
+        saveChat() // Save on error
       }
     }
   )
@@ -460,9 +484,13 @@ watch(() => props.visible, (newVal) => {
                     <FileText :size="16" />
                     <span>Current Page</span>
                   </button>
-                  <button class="menu-item" @click="showRangeUI">
+                  <button class="menu-item" @click="requestRange">
                     <Hash :size="16" />
                     <span>Page Range...</span>
+                  </button>
+                  <button class="menu-item" @click="requestFullPdf">
+                    <FileText :size="16" />
+                    <span>Full PDF</span>
                   </button>
                 </template>
                 <template v-else>
@@ -797,6 +825,13 @@ watch(() => props.visible, (newVal) => {
   border-radius: 4px;
   font-family: monospace;
   font-size: 0.9em;
+}
+
+.markdown-content :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
 }
 
 .message-actions {

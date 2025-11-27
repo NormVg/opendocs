@@ -102,6 +102,8 @@ app.whenReady().then(() => {
             const base64Data = fileBuffer.toString('base64')
             const dataUrl = `data:application/pdf;base64,${base64Data}`
 
+            console.log('Attaching PDF to message:', filePath)
+
             finalMessages[lastMsgIndex] = {
               ...lastMsg,
               experimental_attachments: [
@@ -112,6 +114,8 @@ app.whenReady().then(() => {
                 }
               ]
             }
+          } else {
+            console.warn('No user message found to attach PDF')
           }
         } catch (err) {
           console.error('Error reading PDF for chat:', err)
@@ -137,7 +141,23 @@ app.whenReady().then(() => {
       event.sender.send('chat-done')
     } catch (error) {
       console.error('Chat stream error:', error)
-      event.sender.send('chat-error', error.message)
+
+      let userFriendlyMessage = 'An error occurred while processing your request.'
+
+      // Handle specific error types
+      if (error.message?.includes('API key')) {
+        userFriendlyMessage = 'Invalid or missing API key. Please check your Gemini API key in Settings.'
+      } else if (error.message?.includes('quota') || error.message?.includes('rate limit')) {
+        userFriendlyMessage = 'API quota exceeded or rate limit reached. Please try again later.'
+      } else if (error.message?.includes('network') || error.message?.includes('ENOTFOUND')) {
+        userFriendlyMessage = 'Network error. Please check your internet connection and try again.'
+      } else if (error.message?.includes('timeout')) {
+        userFriendlyMessage = 'Request timed out. The model might be temporarily unavailable.'
+      } else if (error.message) {
+        userFriendlyMessage = `Error: ${error.message}`
+      }
+
+      event.sender.send('chat-error', userFriendlyMessage)
     }
   })
 
