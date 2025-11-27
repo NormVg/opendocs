@@ -18,8 +18,11 @@
     "build:linux": "npm run build && electron-builder --linux"
   },
   "dependencies": {
+    "@ai-sdk/google": "^2.0.43",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "ai": "^5.0.103",
+    "highlight.js": "^11.11.1",
     "lucide-vue-next": "^0.555.0",
     "markdown-it": "^14.1.0",
     "pdfjs-dist": "^5.4.394",

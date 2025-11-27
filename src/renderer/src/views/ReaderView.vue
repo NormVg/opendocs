@@ -1,6 +1,6 @@
 <script setup>
-import { ref, onMounted, watch, nextTick, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, shallowRef, onMounted, watch, nextTick, onUnmounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import VuePdfEmbed from 'vue-pdf-embed'
 import ReaderToolbar from '../components/ReaderToolbar.vue'
 import AIChatSidebar from '../components/AIChatSidebar.vue'
@@ -11,6 +11,7 @@ import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 
 const route = useRoute()
+const router = useRouter()
 const title = ref(route.query.title || 'Document')
 const pdfSource = ref(null)
 const currentPage = ref(1)
@@ -20,17 +21,12 @@ const pdfContainer = ref(null)
 const searchText = ref('')
 const searchResults = ref([])
 const currentSearchIndex = ref(-1)
-const pdfDocument = ref(null)
+const pdfDocument = shallowRef(null)
 const isStarred = ref(false)
 const currentFilePath = ref(null)
 const pdfBufferCopy = ref(null) // Store a copy of the buffer for search
 const highlightPositions = ref([])
-const isSidebarCollapsed = ref(false)
 const isAiChatOpen = ref(false)
-
-const toggleSidebar = () => {
-  isSidebarCollapsed.value = !isSidebarCollapsed.value
-}
 
 const toggleAiChat = () => {
   isAiChatOpen.value = !isAiChatOpen.value
@@ -361,7 +357,7 @@ watch(() => route.query.path, (newPath) => {
     loadPdfFromPath(newPath)
   }
 }, { immediate: true })
-const sidebarRef = ref(null)
+const aiSidebar = ref(null)
 
 // Pan & Zoom Logic
 const panX = ref(0)
@@ -378,9 +374,6 @@ const startPan = (e) => {
   startY.value = e.clientY - panY.value
   document.body.style.cursor = 'grabbing'
 }
-
-// ... (handlePan and endPan remain same)
-
 
 const handlePan = (e) => {
   if (!isDragging.value) return
@@ -408,8 +401,8 @@ const handleRequestCurrentPage = async () => {
   const pageNum = currentPage.value
   const text = await extractTextFromPage(pdfDocument.value, pageNum)
 
-  if (sidebarRef.value) {
-    sidebarRef.value.addContextItem({
+  if (aiSidebar.value) {
+    aiSidebar.value.addContextItem({
       type: 'page',
       label: `Page ${pageNum}`,
       content: text
@@ -430,23 +423,31 @@ const handleRequestRange = async ({ start, end }) => {
     combinedText += `[Page ${i}]\n${text}\n\n`
   }
 
-  if (sidebarRef.value) {
-    sidebarRef.value.addContextItem({
+  if (aiSidebar.value) {
+    aiSidebar.value.addContextItem({
       type: 'range',
       label: `Pages ${startPage}-${endPage}`,
       content: combinedText
     })
   }
 }
+
+const handleOpenFile = (path) => {
+  // Update route to reflect new file
+  // This will trigger the watcher on route.query.path
+  const fileName = path.split(/[/\\]/).pop()
+  router.push({
+    query: {
+      ...route.query,
+      path: path,
+      title: fileName
+    }
+  })
+}
 </script>
 
 <template>
   <div class="reader-layout">
-    <ReaderSidebar
-      :collapsed="isSidebarCollapsed"
-      @toggle="toggleSidebar"
-      @open-file="handleOpenFile"
-    />
     <div class="main-content">
       <ReaderToolbar
         :title="title"
@@ -459,17 +460,18 @@ const handleRequestRange = async ({ start, end }) => {
         @search="handleSearch"
         @next-result="nextSearchResult"
         @previous-result="previousSearchResult"
-        @toggle-bookmark="toggleStarred"
+        @toggle-bookmark="toggleBookmark"
         @toggle-ai-chat="toggleAiChat"
       />
       <div class="reader-content">
         <AIChatSidebar
-          ref="sidebarRef"
-          :visible="isAiChatOpen"
-          @close="isAiChatOpen = false"
-          @request-context-current="handleRequestCurrentPage"
-          @request-context-range="handleRequestRange"
-        />
+      :visible="isAiChatOpen"
+      :file-path="currentFilePath"
+      @close="toggleAiChat"
+      @request-context-current="handleRequestCurrentPage"
+      @request-context-range="handleRequestRange"
+      ref="aiSidebar"
+    />
 
         <div
           class="pdf-container"
@@ -661,14 +663,14 @@ const handleRequestRange = async ({ start, end }) => {
 .footer-left {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-xs);
+  align-items: center;
+  gap: 4px;
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--color-border);
   padding: 8px 12px;
-  border-radius: 20px; /* Adjusted for stacked layout */
+  border-radius: 16px;
   box-shadow: var(--shadow-sm);
 }
 

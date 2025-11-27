@@ -75,6 +75,72 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.on('chat-stream', async (event, { messages, apiKey, context, filePath, model }) => {
+    try {
+      const { streamText } = require('ai')
+      const { createGoogleGenerativeAI } = require('@ai-sdk/google')
+      const fs = require('fs')
+
+      const google = createGoogleGenerativeAI({
+        apiKey: apiKey
+      })
+
+      const systemMessage = context
+        ? `You are a helpful AI assistant. You have access to the following document context:\n\n${context}\n\nAnswer the user's question based on this context if relevant.`
+        : 'You are a helpful AI assistant.'
+
+      // Prepare messages with file if available
+      let finalMessages = [...messages]
+
+      if (filePath) {
+        try {
+          const fileBuffer = fs.readFileSync(filePath)
+          const lastMsgIndex = finalMessages.findLastIndex(m => m.role === 'user')
+
+          if (lastMsgIndex !== -1) {
+            const lastMsg = finalMessages[lastMsgIndex]
+            const base64Data = fileBuffer.toString('base64')
+            const dataUrl = `data:application/pdf;base64,${base64Data}`
+
+            finalMessages[lastMsgIndex] = {
+              ...lastMsg,
+              experimental_attachments: [
+                {
+                  name: 'document.pdf',
+                  contentType: 'application/pdf',
+                  url: dataUrl
+                }
+              ]
+            }
+          }
+        } catch (err) {
+          console.error('Error reading PDF for chat:', err)
+          // Continue without file if read fails
+        }
+      }
+
+      const result = await streamText({
+        model: google(model || 'gemini-2.0-flash-lite'),
+        system: systemMessage,
+        messages: finalMessages,
+      })
+
+      let chunkCount = 0
+      for await (const chunk of result.textStream) {
+        if (typeof chunk === 'string') {
+          chunkCount++
+          event.sender.send('chat-chunk', chunk)
+        }
+      }
+      console.log(`Streamed ${chunkCount} chunks`)
+
+      event.sender.send('chat-done')
+    } catch (error) {
+      console.error('Chat stream error:', error)
+      event.sender.send('chat-error', error.message)
+    }
+  })
+
   createWindow()
 
   app.on('activate', function () {

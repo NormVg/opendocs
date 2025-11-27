@@ -1,31 +1,122 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { Plus, SlidersHorizontal, Sparkles, ArrowUp, Copy, Check, X, FileText, Hash, Trash2 } from 'lucide-vue-next'
+import { Plus, SlidersHorizontal, Sparkles, ArrowUp, Copy, Check, X, FileText, Hash, Trash2, Reply, MessageSquare, History } from 'lucide-vue-next'
 import MarkdownIt from 'markdown-it'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/atom-one-dark.css'
 
 const props = defineProps({
   visible: {
     type: Boolean,
     default: false
+  },
+  filePath: {
+    type: String,
+    default: ''
   }
 })
 
 const emit = defineEmits(['close', 'request-context-current', 'request-context-range'])
 
-const md = new MarkdownIt()
+const md = new MarkdownIt({
+  html: true,
+  linkify: true,
+  typographer: true,
+  highlight: function (str, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        return '<pre class="hljs"><code>' +
+               hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
+               '</code></pre>';
+      } catch (__) {}
+    }
+
+    return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
+  }
+})
+
 const width = ref(50) // Percentage
 const isResizing = ref(false)
 const inputQuery = ref('')
-const messages = ref([
-  {
-    id: 1,
-    role: 'ai',
-    content: 'Hello! I can help you analyze this document. Ask me anything about it.'
-  }
-])
+const messages = ref([])
 const messagesContainer = ref(null)
+const chatHistory = ref([])
+const currentChatId = ref(null)
+const showHistory = ref(false)
+const selectedModel = ref('gemini-2.0-flash-lite')
 
-// Context Logic
+const models = [
+  { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite' },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
+]
+
+// Load history on mount
+onMounted(() => {
+  const saved = localStorage.getItem('opendocs-chat-history')
+  if (saved) {
+    try {
+      chatHistory.value = JSON.parse(saved)
+    } catch (e) {
+      chatHistory.value = []
+    }
+  }
+  startNewChat()
+})
+
+const saveChat = () => {
+  if (messages.value.length === 0) return
+
+  const chat = {
+    id: currentChatId.value,
+    title: messages.value.find(m => m.role === 'user')?.content.slice(0, 30) + '...' || 'New Chat',
+    date: new Date().toISOString(),
+    messages: messages.value,
+    model: selectedModel.value
+  }
+
+  const index = chatHistory.value.findIndex(c => c.id === currentChatId.value)
+  if (index !== -1) {
+    chatHistory.value[index] = chat
+  } else {
+    chatHistory.value.unshift(chat)
+  }
+
+  localStorage.setItem('opendocs-chat-history', JSON.stringify(chatHistory.value))
+}
+
+const loadChat = (chat) => {
+  currentChatId.value = chat.id
+  messages.value = chat.messages
+  selectedModel.value = chat.model || 'gemini-2.0-flash-lite'
+  showHistory.value = false
+  scrollToBottom()
+}
+
+const startNewChat = () => {
+  saveChat() // Save current before switching
+  currentChatId.value = Date.now().toString()
+  messages.value = [
+    {
+      id: 1,
+      role: 'ai',
+      content: 'Hello! I can help you analyze this document. Ask me anything about it.',
+      isStreaming: false
+    }
+  ]
+  showHistory.value = false
+}
+
+const deleteChat = (id) => {
+  chatHistory.value = chatHistory.value.filter(c => c.id !== id)
+  localStorage.setItem('opendocs-chat-history', JSON.stringify(chatHistory.value))
+  if (currentChatId.value === id) {
+    startNewChat()
+  }
+}
+
+// ... (rest of logic)
+
 const showContextMenu = ref(false)
 const showRangeInput = ref(false)
 const rangeStart = ref('')
@@ -77,6 +168,14 @@ const removeContextItem = (id) => {
 
 defineExpose({ addContextItem })
 
+const replyToMessage = (content) => {
+  addContextItem({
+    type: 'ai-reply',
+    label: 'AI Response',
+    content: content
+  })
+}
+
 // Resize logic
 const startResize = (e) => {
   isResizing.value = true
@@ -104,45 +203,81 @@ const stopResize = () => {
 const sendMessage = () => {
   if (!inputQuery.value.trim() && contextItems.value.length === 0) return
 
-  // Construct message with context if present
-  let fullContent = inputQuery.value
-
-  // In a real app, we'd send context as a separate field to the LLM.
-  // For display, we just show the user's query.
-  // For the "mock" response, we'll acknowledge the context.
-
-  const contextLabels = contextItems.value.map(i => i.label).join(', ')
-
-  // Add user message
-  messages.value.push({
-    id: Date.now(),
-    role: 'user',
-    content: inputQuery.value,
-    context: [...contextItems.value] // Store context with message
-  })
-
-  const userQuery = inputQuery.value
-  inputQuery.value = ''
-  const usedContext = [...contextItems.value]
-  contextItems.value = [] // Clear context after sending
-
-  // Simulate AI response (mock for now)
-  setTimeout(() => {
-    let responseText = ''
-    if (usedContext.length > 0) {
-      responseText += `*Analyzing context: ${usedContext.map(i => i.label).join(', ')}...*\n\n`
-    }
-    responseText += `I analyzed the document based on your query: "**${userQuery}**". \n\nHere are some key points:\n- Point 1\n- Point 2\n\nLet me know if you need more details.`
-
+  const apiKey = localStorage.getItem('gemini_api_key')
+  if (!apiKey) {
     messages.value.push({
-      id: Date.now() + 1,
+      id: Date.now(),
       role: 'ai',
-      content: responseText
+      content: 'Please set your Gemini API Key in Settings to use the AI Chat.'
     })
     scrollToBottom()
-  }, 1000)
+    return
+  }
+
+  // Prepare context string
+  const contextString = contextItems.value.map(item => `[${item.label}]: ${item.content}`).join('\n\n')
+
+  // Add user message
+  const userMsgId = Date.now()
+  messages.value.push({
+    id: userMsgId,
+    role: 'user',
+    content: inputQuery.value,
+    context: [...contextItems.value]
+  })
+
+  const userContent = inputQuery.value
+  inputQuery.value = ''
+  // contextItems.value = [] // Keep context items until manually removed
+
+  // Prepare AI message placeholder
+  const aiMsgId = userMsgId + 1
+  messages.value.push({
+    id: aiMsgId,
+    role: 'ai',
+    content: '',
+    isStreaming: true
+  })
 
   scrollToBottom()
+
+  // Prepare history for API
+  const apiMessages = messages.value
+    .filter(m => m.id !== aiMsgId)
+    .map(m => ({
+      role: m.role === 'ai' ? 'assistant' : 'user',
+      content: m.content
+    }))
+
+  // Start stream
+  window.api.streamChat(
+    apiMessages,
+    apiKey,
+    contextString,
+    props.filePath,
+    (chunk) => {
+      const aiMsg = messages.value.find(m => m.id === aiMsgId)
+      if (aiMsg) {
+        aiMsg.content += chunk
+        scrollToBottom()
+      }
+    },
+    () => {
+      console.log('Stream complete')
+      const aiMsg = messages.value.find(m => m.id === aiMsgId)
+      if (aiMsg) {
+        aiMsg.isStreaming = false
+      }
+    },
+    (error) => {
+      const aiMsg = messages.value.find(m => m.id === aiMsgId)
+      if (aiMsg) {
+        aiMsg.content += `\n\n*Error: ${error}*`
+        aiMsg.isStreaming = false
+        scrollToBottom()
+      }
+    }
+  )
 }
 
 const scrollToBottom = () => {
@@ -167,6 +302,36 @@ const copyToClipboard = async (text, id) => {
   }
 }
 
+const textareaRef = ref(null)
+
+const autoResize = () => {
+  const textarea = textareaRef.value
+  if (!textarea) return
+
+  textarea.style.height = 'auto'
+  textarea.style.height = textarea.scrollHeight + 'px'
+}
+
+const handleEnterKey = (e) => {
+  if (e.shiftKey) {
+    // Allow new line
+    return
+  }
+  // Send message
+  sendMessage()
+}
+
+// Reset height after sending
+watch(inputQuery, (newVal) => {
+  if (newVal === '') {
+    nextTick(() => {
+      if (textareaRef.value) {
+        textareaRef.value.style.height = 'auto'
+      }
+    })
+  }
+})
+
 watch(() => props.visible, (newVal) => {
   if (newVal) {
     scrollToBottom()
@@ -185,13 +350,50 @@ watch(() => props.visible, (newVal) => {
 
     <!-- Header -->
     <div class="sidebar-header">
+      <div class="header-left">
+        <button class="icon-btn" @click="showHistory = !showHistory" :class="{ active: showHistory }" title="Chat History">
+          <History :size="20" />
+        </button>
+        <button class="icon-btn" @click="startNewChat" title="New Chat">
+          <MessageSquare :size="20" />
+          <Plus :size="14" class="plus-badge" />
+        </button>
+      </div>
+
       <button class="close-btn" @click="$emit('close')">
         <X :size="20" />
       </button>
     </div>
 
+    <!-- History View -->
+    <div v-if="showHistory" class="history-view">
+      <div class="history-header">
+        <h3>Chat History</h3>
+      </div>
+      <div class="history-list">
+        <div
+          v-for="chat in chatHistory"
+          :key="chat.id"
+          class="history-item"
+          :class="{ active: chat.id === currentChatId }"
+          @click="loadChat(chat)"
+        >
+          <div class="history-info">
+            <span class="history-title">{{ chat.title }}</span>
+            <span class="history-date">{{ new Date(chat.date).toLocaleDateString() }}</span>
+          </div>
+          <button class="delete-chat-btn" @click.stop="deleteChat(chat.id)">
+            <Trash2 :size="14" />
+          </button>
+        </div>
+        <div v-if="chatHistory.length === 0" class="empty-history">
+          No chat history yet
+        </div>
+      </div>
+    </div>
+
     <!-- Messages Area -->
-    <div class="messages-area" ref="messagesContainer">
+    <div v-else class="messages-area" ref="messagesContainer">
       <div v-for="msg in messages" :key="msg.id" class="message-wrapper" :class="msg.role">
         <!-- User Message -->
         <div v-if="msg.role === 'user'" class="user-bubble">
@@ -205,13 +407,17 @@ watch(() => props.visible, (newVal) => {
         </div>
 
         <!-- AI Message -->
-        <div v-else class="ai-message">
+        <div v-else class="ai-message" :class="{ 'streaming': msg.isStreaming }">
           <div class="markdown-content" v-html="md.render(msg.content)"></div>
           <div class="message-actions">
             <button class="action-btn" @click="copyToClipboard(msg.content, msg.id)">
               <Check v-if="copiedId === msg.id" :size="14" />
               <Copy v-else :size="14" />
               <span>{{ copiedId === msg.id ? 'Copied' : 'Copy' }}</span>
+            </button>
+            <button class="action-btn" @click="replyToMessage(msg.content)">
+              <Reply :size="14" />
+              <span>Reply</span>
             </button>
           </div>
         </div>
@@ -232,12 +438,14 @@ watch(() => props.visible, (newVal) => {
       </div>
 
       <div class="input-box">
-        <input
+        <textarea
           v-model="inputQuery"
-          type="text"
+          ref="textareaRef"
           placeholder="Ask a follow-up..."
-          @keydown.enter="sendMessage"
-        />
+          rows="1"
+          @keydown.enter.prevent="handleEnterKey"
+          @input="autoResize"
+        ></textarea>
         <div class="input-actions">
           <div class="left-actions">
             <div class="context-menu-wrapper">
@@ -268,6 +476,14 @@ watch(() => props.visible, (newVal) => {
                   </div>
                 </template>
               </div>
+            </div>
+
+            <div class="model-selector-small">
+              <select v-model="selectedModel" title="Select Model">
+                <option v-for="model in models" :key="model.id" :value="model.id">
+                  {{ model.name }}
+                </option>
+              </select>
             </div>
           </div>
           <button
@@ -329,8 +545,137 @@ watch(() => props.visible, (newVal) => {
   height: 56px;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   padding: 0 var(--space-l);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plus-badge {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  background: var(--color-bg);
+  border-radius: 50%;
+  padding: 1px;
+}
+
+.model-selector-small {
+  display: flex;
+  align-items: center;
+  height: 32px; /* Match icon button height */
+}
+
+.model-selector-small select {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0 8px;
+  height: 100%;
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+  max-width: 140px;
+  transition: all var(--transition-fast);
+}
+
+.model-selector-small select:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.history-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.history-header {
+  padding: var(--space-m) var(--space-l);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.history-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.history-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-s);
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-bottom: 4px;
+}
+
+.history-item:hover {
+  background: var(--color-bg-hover);
+}
+
+.history-item.active {
+  background: var(--color-bg-hover);
+  border: 1px solid var(--color-border);
+}
+
+.history-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.history-title {
+  font-size: 13px;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-date {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.delete-chat-btn {
+  opacity: 0;
+  color: var(--color-text-tertiary);
+  padding: 4px;
+  border-radius: 4px;
+  transition: all var(--transition-fast);
+}
+
+.history-item:hover .delete-chat-btn {
+  opacity: 1;
+}
+
+.delete-chat-btn:hover {
+  color: #ff4d4f;
+  background: rgba(255, 77, 79, 0.1);
+}
+
+.empty-history {
+  padding: var(--space-l);
+  text-align: center;
+  color: var(--color-text-tertiary);
+  font-size: 13px;
 }
 
 .close-btn {
@@ -404,6 +749,33 @@ watch(() => props.visible, (newVal) => {
   color: var(--color-text-primary);
   font-size: var(--font-size-base);
   line-height: 1.6;
+}
+
+.ai-message.streaming .markdown-content::after {
+  content: '▋';
+  display: inline-block;
+  vertical-align: baseline;
+  animation: blink 1s step-start infinite;
+  color: var(--color-text-primary);
+  margin-left: 2px;
+  font-size: 0.8em;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Syntax Highlighting Overrides */
+:deep(.hljs) {
+  background: #1e1e1e;
+  padding: 12px;
+  border-radius: 8px;
+  margin: 8px 0;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.9em;
+  overflow-x: auto;
+  color: #abb2bf;
 }
 
 .markdown-content :deep(p) {
@@ -505,14 +877,23 @@ watch(() => props.visible, (newVal) => {
   box-shadow: var(--shadow-md);
 }
 
-.input-box input {
+.input-box textarea {
   width: 100%;
   font-size: var(--font-size-base);
   color: var(--color-text-primary);
   padding: 4px 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  min-height: 24px;
+  max-height: 120px;
+  overflow-y: auto;
+  font-family: inherit;
+  line-height: 1.5;
 }
 
-.input-box input::placeholder {
+.input-box textarea::placeholder {
   color: var(--color-text-tertiary);
 }
 
@@ -601,10 +982,14 @@ watch(() => props.visible, (newVal) => {
 }
 
 .icon-btn {
+  position: relative; /* For badge positioning */
   color: var(--color-text-tertiary);
   padding: 6px;
   border-radius: 6px;
   transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .icon-btn:hover, .icon-btn.active {
