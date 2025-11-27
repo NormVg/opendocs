@@ -11,6 +11,7 @@ const searchInputRef = ref(null)
 const showSaved = ref(false)
 const isDarkMode = ref(false)
 const currentView = ref('all') // 'all' or 'saved'
+const showHelp = ref(false)
 
 // Load dark mode preference
 onMounted(() => {
@@ -137,6 +138,10 @@ const openSettings = () => {
   router.push({ name: 'settings' })
 }
 
+const toggleHelp = () => {
+  showHelp.value = !showHelp.value
+}
+
 const toggleSearch = () => {
   isSearchActive.value = !isSearchActive.value
   if (isSearchActive.value) {
@@ -199,7 +204,7 @@ onMounted(() => {
       <div class="footer-left">
         <button class="text-btn" @click="openSettings">settings</button>
         <span class="separator">•</span>
-        <button class="text-btn">need help?</button>
+        <button class="text-btn" @click="toggleHelp">need help?</button>
       </div>
       <div class="footer-right">
         <button
@@ -215,6 +220,49 @@ onMounted(() => {
         </button>
         <span class="separator">•</span>
         <button class="text-btn" @click="handleOpenFile">open</button>
+      </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div v-if="showHelp" class="help-overlay" @click="toggleHelp">
+      <div class="help-modal" @click.stop>
+        <div class="help-header">
+          <h2>Quick Guide</h2>
+          <button class="close-btn" @click="toggleHelp">×</button>
+        </div>
+        <div class="help-content">
+          <section>
+            <h3>Getting Started</h3>
+            <p>Click <strong>open</strong> to select a PDF file from your computer.</p>
+          </section>
+
+          <section>
+            <h3>Navigation</h3>
+            <ul>
+              <li><strong>all</strong> – View all documents</li>
+              <li><strong>saved</strong> – View starred documents</li>
+              <li><strong>search</strong> – Find documents by name</li>
+              <li><strong>settings</strong> – Configure API keys and models</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>AI Chat</h3>
+            <p>Click the ✨ icon in the reader to chat with AI about your document.</p>
+            <ul>
+              <li>Add context: current page, page range, or full document</li>
+              <li>Set your Gemini API key in Settings to use AI features</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3>Keyboard Shortcuts</h3>
+            <ul>
+              <li><kbd>Esc</kbd> – Close search or modals</li>
+              <li><kbd>⌘/Ctrl + F</kbd> – Search in document (reader)</li>
+            </ul>
+          </section>
+        </div>
       </div>
     </div>
   </div>
@@ -380,6 +428,149 @@ onMounted(() => {
 }
 
 .text-btn.active {
+  color: var(--color-text-primary);
+}
+
+/* Help Modal */
+.help-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.help-modal {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-l);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.help-header h2 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.close-btn {
+  font-size: 32px;
+  line-height: 1;
+  color: var(--color-text-tertiary);
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.close-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.help-content {
+  padding: var(--space-l);
+  overflow-y: auto;
+  max-height: calc(80vh - 80px);
+}
+
+.help-content section {
+  margin-bottom: var(--space-l);
+}
+
+.help-content section:last-child {
+  margin-bottom: 0;
+}
+
+.help-content h3 {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-s) 0;
+}
+
+.help-content p {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-s) 0;
+  line-height: 1.6;
+}
+
+.help-content ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.help-content li {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xs);
+  padding-left: var(--space-m);
+  position: relative;
+  line-height: 1.6;
+}
+
+.help-content li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: var(--color-text-tertiary);
+}
+
+.help-content strong {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.help-content kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: var(--font-size-xs);
+  font-family: monospace;
+  background: var(--color-bg-hover);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
   color: var(--color-text-primary);
 }
 </style>

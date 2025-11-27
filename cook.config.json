@@ -7,6 +7,9 @@
             "pnpm run dev"
         ],
         "build": [
+            "pnpm run build:mac"
+        ],
+        "install":[
             "pnpm install"
         ],
         "clean": [

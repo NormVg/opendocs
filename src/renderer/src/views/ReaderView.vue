@@ -113,11 +113,10 @@ const loadPdfFromPath = async (filePath) => {
     isLoading.value = true
     const buffer = await window.api.readPdfFile(filePath)
     if (buffer) {
-      // Store a copy of the buffer for search operations
       pdfBufferCopy.value = new Uint8Array(buffer).slice()
-
       pdfSource.value = new Uint8Array(buffer)
-      // Load PDF document for text extraction
+
+      // Load PDF document for text extraction (keep for AI chat)
       const loadingTask = pdfjsLib.getDocument({ data: buffer })
       pdfDocument.value = await loadingTask.promise
     } else {
@@ -184,7 +183,6 @@ const extractTextFromPage = async (pdfDoc, pageNum) => {
 let searchTimeout = null
 
 const handleSearch = async (query) => {
-  // Clear previous timeout
   if (searchTimeout) {
     clearTimeout(searchTimeout)
   }
@@ -194,28 +192,23 @@ const handleSearch = async (query) => {
   if (!query) {
     searchResults.value = []
     currentSearchIndex.value = -1
-    highlightPositions.value = []
     return
   }
 
-  // Debounce search to avoid too many calls
+  // Debounce search
   searchTimeout = setTimeout(async () => {
-    if (!pdfBufferCopy.value) {
-      console.warn('PDF not loaded yet')
+    if (!pdfDocument.value) {
+      console.warn('PDF not loaded')
       return
     }
 
-    console.log('Starting search for:', query)
+    console.log('Searching for:', query)
     const results = []
 
     try {
-      // Use the stored buffer copy for search
-      const loadingTask = pdfjsLib.getDocument({ data: pdfBufferCopy.value.slice() })
-      const searchPdf = await loadingTask.promise
-
       // Search through all pages
       for (let pageNum = 1; pageNum <= pageCount.value; pageNum++) {
-        const pageText = await extractTextFromPage(searchPdf, pageNum)
+        const pageText = await extractTextFromPage(pdfDocument.value, pageNum)
         const lowerPageText = pageText.toLowerCase()
         const lowerQuery = query.toLowerCase()
 
@@ -230,97 +223,18 @@ const handleSearch = async (query) => {
         }
       }
 
-      // Clean up the search PDF instance
-      await searchPdf.destroy()
-
       searchResults.value = results
+      console.log(`Found ${results.length} matches`)
 
       if (results.length > 0) {
         currentSearchIndex.value = 0
-        await calculateHighlightPositions(pdfDocument.value, query) // Use the main pdfDocument for highlight calculation
         scrollToSearchResult(0)
-        console.log(`Found ${results.length} results`)
-      } else {
-        highlightPositions.value = []
-        console.log('No results found')
       }
     } catch (error) {
       console.error('Search error:', error)
       searchResults.value = []
-      highlightPositions.value = []
     }
-  }, 300) // 300ms debounce
-}
-
-const calculateHighlightPositions = async (pdfDoc, query) => {
-  const highlights = []
-  const container = pdfContainer.value
-  if (!container) return
-
-  const canvases = container.querySelectorAll('canvas')
-  const queryLower = query.toLowerCase()
-
-  try {
-    for (let pageNum = 1; pageNum <= pageCount.value; pageNum++) {
-      const page = await pdfDoc.getPage(pageNum)
-      const textContent = await page.getTextContent()
-      const viewport = page.getViewport({ scale: 1.5 }) // Match vue-pdf-embed scale
-
-      const canvas = canvases[pageNum - 1]
-      if (!canvas) continue
-
-      const canvasRect = canvas.getBoundingClientRect()
-      const containerRect = container.getBoundingClientRect()
-
-      // Get all text items and their positions
-      textContent.items.forEach((item) => {
-        const text = item.str.toLowerCase()
-        const textIndex = text.indexOf(queryLower)
-
-        if (textIndex !== -1) {
-          // Calculate position on the page
-          const transform = item.transform
-          const x = transform[4]
-          const y = transform[5]
-          const width = item.width
-          const height = item.height
-
-          // Convert PDF coordinates to screen coordinates
-          const left = canvasRect.left - containerRect.left + (x * canvasRect.width / viewport.width)
-          const top = canvasRect.top - containerRect.top + ((viewport.height - y - height) * canvasRect.height / viewport.height) // Adjust y for top-left origin
-          const highlightWidth = (width * canvasRect.width / viewport.width)
-          const highlightHeight = (height * canvasRect.height / viewport.height)
-
-          highlights.push({
-            top,
-            left,
-            width: highlightWidth,
-            height: highlightHeight,
-            page: pageNum
-          })
-        }
-      })
-    }
-
-    highlightPositions.value = highlights
-  } catch (error) {
-    console.error('Error calculating highlights:', error)
-  }
-}
-
-const scrollToSearchResult = (index) => {
-  if (index < 0 || index >= searchResults.value.length) return
-
-  const result = searchResults.value[index]
-  const container = pdfContainer.value
-  if (!container) return
-
-  const canvases = container.querySelectorAll('canvas')
-  const targetCanvas = canvases[result.page - 1]
-
-  if (targetCanvas) {
-    targetCanvas.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }
+  }, 300)
 }
 
 const nextSearchResult = () => {
@@ -337,6 +251,25 @@ const previousSearchResult = () => {
   }
   scrollToSearchResult(currentSearchIndex.value)
 }
+
+const scrollToSearchResult = (index) => {
+  if (!searchResults.value[index]) return
+
+  const result = searchResults.value[index]
+  currentPage.value = result.page
+
+  nextTick(() => {
+    // Scroll to page (simplified - no exact coordinate matching)
+    if (pdfContainer.value) {
+      const canvases = pdfContainer.value.querySelectorAll('canvas')
+      const targetCanvas = canvases[result.page - 1]
+      if (targetCanvas) {
+        targetCanvas.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }
+  })
+}
+
 
 onUnmounted(() => {
   if (observer) {
@@ -525,20 +458,6 @@ const handleOpenFile = (path) => {
               @loading-failed="handleLoadingFailed"
               class="pdf-viewer"
             />
-
-            <!-- Search highlights overlay -->
-            <div
-              v-for="(highlight, index) in highlightPositions"
-              :key="`highlight-${index}`"
-              class="search-highlight"
-              :class="{ 'active-highlight': index === currentSearchIndex }"
-              :style="{
-                top: highlight.top + 'px',
-                left: highlight.left + 'px',
-                width: highlight.width + 'px',
-                height: highlight.height + 'px'
-              }"
-            />
           </div>
 
           <div v-else class="empty-state">
@@ -666,6 +585,22 @@ const handleOpenFile = (path) => {
 
 .pdf-viewer canvas {
   display: block;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+.viewer-container {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.pdfViewer {
+  padding: var(--space-xl);
+}
+
+.pdfViewer .page {
+  margin-bottom: 20px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   border-radius: 4px;
 }

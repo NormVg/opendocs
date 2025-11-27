@@ -21,6 +21,7 @@
     "@ai-sdk/google": "^2.0.43",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@vue-pdf-viewer/viewer": "^3.5.0",
     "ai": "^5.0.103",
     "highlight.js": "^11.11.1",
     "lucide-vue-next": "^0.555.0",
