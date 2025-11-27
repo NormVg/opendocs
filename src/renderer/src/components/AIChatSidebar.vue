@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { Plus, SlidersHorizontal, Sparkles, ArrowUp, Copy, Check, X } from 'lucide-vue-next'
+import { Plus, SlidersHorizontal, Sparkles, ArrowUp, Copy, Check, X, FileText, Hash, Trash2 } from 'lucide-vue-next'
 import MarkdownIt from 'markdown-it'
 
 const props = defineProps({
@@ -10,7 +10,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'request-context-current', 'request-context-range'])
 
 const md = new MarkdownIt()
 const width = ref(50) // Percentage
@@ -24,6 +24,58 @@ const messages = ref([
   }
 ])
 const messagesContainer = ref(null)
+
+// Context Logic
+const showContextMenu = ref(false)
+const showRangeInput = ref(false)
+const rangeStart = ref('')
+const rangeEnd = ref('')
+const contextItems = ref([]) // { id, type: 'page'|'range', label, content }
+
+const toggleContextMenu = () => {
+  showContextMenu.value = !showContextMenu.value
+  showRangeInput.value = false // Reset range view on toggle
+}
+
+const requestCurrentPage = () => {
+  emit('request-context-current')
+  showContextMenu.value = false
+}
+
+const showRangeUI = () => {
+  showRangeInput.value = true
+}
+
+const requestRange = () => {
+  const start = parseInt(rangeStart.value)
+  const end = parseInt(rangeEnd.value)
+
+  if (start && end && start <= end) {
+    emit('request-context-range', { start, end })
+    showContextMenu.value = false
+    showRangeInput.value = false
+    rangeStart.value = ''
+    rangeEnd.value = ''
+  }
+}
+
+// Exposed method for parent to add context
+const addContextItem = (item) => {
+  // Check for duplicates
+  const exists = contextItems.value.find(i => i.label === item.label)
+  if (!exists) {
+    contextItems.value.push({
+      id: Date.now(),
+      ...item
+    })
+  }
+}
+
+const removeContextItem = (id) => {
+  contextItems.value = contextItems.value.filter(i => i.id !== id)
+}
+
+defineExpose({ addContextItem })
 
 // Resize logic
 const startResize = (e) => {
@@ -50,24 +102,42 @@ const stopResize = () => {
 
 // Chat logic
 const sendMessage = () => {
-  if (!inputQuery.value.trim()) return
+  if (!inputQuery.value.trim() && contextItems.value.length === 0) return
+
+  // Construct message with context if present
+  let fullContent = inputQuery.value
+
+  // In a real app, we'd send context as a separate field to the LLM.
+  // For display, we just show the user's query.
+  // For the "mock" response, we'll acknowledge the context.
+
+  const contextLabels = contextItems.value.map(i => i.label).join(', ')
 
   // Add user message
   messages.value.push({
     id: Date.now(),
     role: 'user',
-    content: inputQuery.value
+    content: inputQuery.value,
+    context: [...contextItems.value] // Store context with message
   })
 
   const userQuery = inputQuery.value
   inputQuery.value = ''
+  const usedContext = [...contextItems.value]
+  contextItems.value = [] // Clear context after sending
 
   // Simulate AI response (mock for now)
   setTimeout(() => {
+    let responseText = ''
+    if (usedContext.length > 0) {
+      responseText += `*Analyzing context: ${usedContext.map(i => i.label).join(', ')}...*\n\n`
+    }
+    responseText += `I analyzed the document based on your query: "**${userQuery}**". \n\nHere are some key points:\n- Point 1\n- Point 2\n\nLet me know if you need more details.`
+
     messages.value.push({
       id: Date.now() + 1,
       role: 'ai',
-      content: `I analyzed the document based on your query: "**${userQuery}**". \n\nHere are some key points:\n- Point 1\n- Point 2\n\nLet me know if you need more details.`
+      content: responseText
     })
     scrollToBottom()
   }, 1000)
@@ -115,7 +185,6 @@ watch(() => props.visible, (newVal) => {
 
     <!-- Header -->
     <div class="sidebar-header">
-      <!-- Title removed -->
       <button class="close-btn" @click="$emit('close')">
         <X :size="20" />
       </button>
@@ -126,6 +195,12 @@ watch(() => props.visible, (newVal) => {
       <div v-for="msg in messages" :key="msg.id" class="message-wrapper" :class="msg.role">
         <!-- User Message -->
         <div v-if="msg.role === 'user'" class="user-bubble">
+          <div v-if="msg.context && msg.context.length > 0" class="message-context-chips">
+            <span v-for="ctx in msg.context" :key="ctx.id" class="context-chip small">
+              <FileText :size="10" />
+              {{ ctx.label }}
+            </span>
+          </div>
           {{ msg.content }}
         </div>
 
@@ -145,6 +220,17 @@ watch(() => props.visible, (newVal) => {
 
     <!-- Input Area -->
     <div class="input-container">
+      <!-- Context Chips Display -->
+      <div v-if="contextItems.length > 0" class="active-context-items">
+        <div v-for="item in contextItems" :key="item.id" class="context-chip">
+          <FileText :size="12" />
+          <span>{{ item.label }}</span>
+          <button class="remove-chip" @click="removeContextItem(item.id)">
+            <X :size="12" />
+          </button>
+        </div>
+      </div>
+
       <div class="input-box">
         <input
           v-model="inputQuery"
@@ -154,11 +240,39 @@ watch(() => props.visible, (newVal) => {
         />
         <div class="input-actions">
           <div class="left-actions">
-            <!-- Removed extra controls -->
+            <div class="context-menu-wrapper">
+              <button class="icon-btn" @click="toggleContextMenu" :class="{ active: showContextMenu }" title="Add Context">
+                <Plus :size="20" />
+              </button>
+
+              <!-- Context Menu Popover -->
+              <div v-if="showContextMenu" class="context-menu">
+                <template v-if="!showRangeInput">
+                  <button class="menu-item" @click="requestCurrentPage">
+                    <FileText :size="16" />
+                    <span>Current Page</span>
+                  </button>
+                  <button class="menu-item" @click="showRangeUI">
+                    <Hash :size="16" />
+                    <span>Page Range...</span>
+                  </button>
+                </template>
+                <template v-else>
+                  <div class="range-input-wrapper">
+                    <div class="range-inputs">
+                      <input v-model="rangeStart" type="number" placeholder="Start" min="1" class="small-input" />
+                      <span>-</span>
+                      <input v-model="rangeEnd" type="number" placeholder="End" min="1" class="small-input" />
+                    </div>
+                    <button class="add-range-btn" @click="requestRange">Add</button>
+                  </div>
+                </template>
+              </div>
+            </div>
           </div>
           <button
             class="send-btn"
-            :disabled="!inputQuery.trim()"
+            :disabled="!inputQuery.trim() && contextItems.length === 0"
             @click="sendMessage"
           >
             <ArrowUp :size="18" />
@@ -219,18 +333,6 @@ watch(() => props.visible, (newVal) => {
   padding: 0 var(--space-l);
 }
 
-.header-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-s);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-}
-
-.ai-icon {
-  color: var(--color-text-secondary);
-}
-
 .close-btn {
   color: var(--color-text-tertiary);
   padding: 4px;
@@ -271,6 +373,30 @@ watch(() => props.visible, (newVal) => {
   max-width: 85%;
   font-size: var(--font-size-base);
   line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.message-context-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.context-chip.small {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: rgba(0,0,0,0.05);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+:global(body.dark-mode) .context-chip.small {
+  background: rgba(255,255,255,0.1);
 }
 
 .ai-message {
@@ -326,6 +452,46 @@ watch(() => props.visible, (newVal) => {
 .input-container {
   padding: var(--space-l);
   padding-top: var(--space-m);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.active-context-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.context-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-bg-hover);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+
+.remove-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
+  padding: 2px;
+  border-radius: 50%;
+}
+
+.remove-chip:hover {
+  background: rgba(0,0,0,0.1);
+  color: var(--color-text-primary);
+}
+
+:global(body.dark-mode) .remove-chip:hover {
+  background: rgba(255,255,255,0.1);
 }
 
 .input-box {
@@ -362,6 +528,78 @@ watch(() => props.visible, (newVal) => {
   gap: 8px;
 }
 
+.context-menu-wrapper {
+  position: relative;
+}
+
+.context-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 6px;
+  min-width: 180px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 100;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  text-align: left;
+  width: 100%;
+}
+
+.menu-item:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.range-input-wrapper {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.small-input {
+  width: 60px;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.add-range-btn {
+  background: var(--color-text-primary);
+  color: var(--color-bg);
+  padding: 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  width: 100%;
+}
+
 .icon-btn {
   color: var(--color-text-tertiary);
   padding: 6px;
@@ -369,7 +607,7 @@ watch(() => props.visible, (newVal) => {
   transition: all var(--transition-fast);
 }
 
-.icon-btn:hover {
+.icon-btn:hover, .icon-btn.active {
   color: var(--color-text-primary);
   background: var(--color-bg-hover);
 }
@@ -391,5 +629,4 @@ watch(() => props.visible, (newVal) => {
   color: var(--color-text-tertiary);
   cursor: not-allowed;
 }
-
 </style>

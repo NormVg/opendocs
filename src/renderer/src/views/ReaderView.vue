@@ -361,6 +361,44 @@ watch(() => route.query.path, (newPath) => {
     loadPdfFromPath(newPath)
   }
 }, { immediate: true })
+const sidebarRef = ref(null)
+
+const handleRequestCurrentPage = async () => {
+  if (!pdfDocument.value) return
+
+  const pageNum = currentPage.value
+  const text = await extractTextFromPage(pdfDocument.value, pageNum)
+
+  if (sidebarRef.value) {
+    sidebarRef.value.addContextItem({
+      type: 'page',
+      label: `Page ${pageNum}`,
+      content: text
+    })
+  }
+}
+
+const handleRequestRange = async ({ start, end }) => {
+  if (!pdfDocument.value) return
+
+  // Validate range
+  const startPage = Math.max(1, Math.min(start, pageCount.value))
+  const endPage = Math.max(startPage, Math.min(end, pageCount.value))
+
+  let combinedText = ''
+  for (let i = startPage; i <= endPage; i++) {
+    const text = await extractTextFromPage(pdfDocument.value, i)
+    combinedText += `[Page ${i}]\n${text}\n\n`
+  }
+
+  if (sidebarRef.value) {
+    sidebarRef.value.addContextItem({
+      type: 'range',
+      label: `Pages ${startPage}-${endPage}`,
+      content: combinedText
+    })
+  }
+}
 </script>
 
 <template>
@@ -386,7 +424,13 @@ watch(() => route.query.path, (newPath) => {
         @toggle-ai-chat="toggleAiChat"
       />
       <div class="reader-content">
-        <AIChatSidebar :visible="isAiChatOpen" @close="isAiChatOpen = false" />
+        <AIChatSidebar
+          ref="sidebarRef"
+          :visible="isAiChatOpen"
+          @close="isAiChatOpen = false"
+          @request-context-current="handleRequestCurrentPage"
+          @request-context-range="handleRequestRange"
+        />
 
         <div class="pdf-container" ref="pdfContainer">
           <div v-if="isLoading" class="loading-indicator">
