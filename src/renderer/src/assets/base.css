@@ -48,6 +48,7 @@
   --transition-slow: 400ms ease-in-out;
   /* Sidebar Background */
   --sidebar-bg: rgba(255, 255, 255, 0.4);
+  --glass-bg: rgba(255, 255, 255, 0.85);
 }
 
 /* Dark mode colors */
@@ -64,6 +65,7 @@ body.dark-mode {
 
   --sidebar-bg: rgba(0, 0, 0, 0.9);
   /* Pure black with slight transparency */
+  --glass-bg: rgba(0, 0, 0, 0.85);
 }
 
 *,
@@ -74,10 +76,19 @@ body.dark-mode {
   padding: 0;
 }
 
-body {
-  font-family: var(--font-family);
+html,
+body,
+#app {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
   background-color: var(--color-bg);
   color: var(--color-text-primary);
+}
+
+body {
+  font-family: var(--font-family);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

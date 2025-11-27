@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, X, Moon, Sun } from 'lucide-vue-next'
+import { Search, X, Moon, Sun, Settings } from 'lucide-vue-next'
 import DocListItem from '../components/DocListItem.vue'
 
 const router = useRouter()
@@ -18,6 +18,14 @@ onMounted(() => {
   if (savedMode === 'true') {
     isDarkMode.value = true
     document.body.classList.add('dark-mode')
+  } else if (savedMode === 'false') {
+    isDarkMode.value = false
+    document.body.classList.remove('dark-mode')
+  } else {
+    // Fallback: check if body already has the class (e.g. from previous navigation)
+    if (document.body.classList.contains('dark-mode')) {
+      isDarkMode.value = true
+    }
   }
 })
 
@@ -125,6 +133,10 @@ const handleOpenFile = async () => {
   }
 }
 
+const openSettings = () => {
+  router.push({ name: 'settings' })
+}
+
 const toggleSearch = () => {
   isSearchActive.value = !isSearchActive.value
   if (isSearchActive.value) {
@@ -185,6 +197,8 @@ onMounted(() => {
 
     <div class="library-footer">
       <div class="footer-left">
+        <button class="text-btn" @click="openSettings">settings</button>
+        <span class="separator">•</span>
         <button class="text-btn">need help?</button>
       </div>
       <div class="footer-right">
@@ -218,6 +232,7 @@ onMounted(() => {
   margin: 0 auto;
   width: 100%;
   position: relative;
+  background-color: var(--color-bg);
 }
 
 .dark-mode-toggle {

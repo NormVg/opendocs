@@ -363,6 +363,45 @@ watch(() => route.query.path, (newPath) => {
 }, { immediate: true })
 const sidebarRef = ref(null)
 
+// Pan & Zoom Logic
+const panX = ref(0)
+const panY = ref(0)
+const isDragging = ref(false)
+const startX = ref(0)
+const startY = ref(0)
+
+const startPan = (e) => {
+  if (zoomLevel.value <= 1) return
+  e.preventDefault() // Prevent native drag/select
+  isDragging.value = true
+  startX.value = e.clientX - panX.value
+  startY.value = e.clientY - panY.value
+  document.body.style.cursor = 'grabbing'
+}
+
+// ... (handlePan and endPan remain same)
+
+
+const handlePan = (e) => {
+  if (!isDragging.value) return
+  e.preventDefault()
+  panX.value = e.clientX - startX.value
+  panY.value = e.clientY - startY.value
+}
+
+const endPan = () => {
+  isDragging.value = false
+  document.body.style.cursor = ''
+}
+
+// Reset pan when zooming out to 1
+watch(zoomLevel, (newZoom) => {
+  if (newZoom <= 1) {
+    panX.value = 0
+    panY.value = 0
+  }
+})
+
 const handleRequestCurrentPage = async () => {
   if (!pdfDocument.value) return
 
@@ -432,36 +471,54 @@ const handleRequestRange = async ({ start, end }) => {
           @request-context-range="handleRequestRange"
         />
 
-        <div class="pdf-container" ref="pdfContainer">
+        <div
+          class="pdf-container"
+          ref="pdfContainer"
+          @mousedown="startPan"
+          @mousemove="handlePan"
+          @mouseup="endPan"
+          @mouseleave="endPan"
+          :class="{ 'is-dragging': isDragging, 'can-drag': zoomLevel > 1 }"
+        >
           <div v-if="isLoading" class="loading-indicator">
             <p>Loading PDF...</p>
           </div>
-          <VuePdfEmbed
-            v-else-if="pdfSource"
-            :source="pdfSource"
-            @loaded="handleDocumentLoad"
-            @loading-failed="handleLoadingFailed"
-            class="pdf-viewer"
-            :style="{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }"
-          />
-        <div v-else class="empty-state">
-          <p>No document loaded</p>
-        </div>
 
-        <!-- Search highlights overlay -->
-        <div
-          v-for="(highlight, index) in highlightPositions"
-          :key="`highlight-${index}`"
-          class="search-highlight"
-          :class="{ 'active-highlight': index === currentSearchIndex }"
-          :style="{
-            top: highlight.top + 'px',
-            left: highlight.left + 'px',
-            width: highlight.width + 'px',
-            height: highlight.height + 'px'
-          }"
-        />
-      </div>
+          <div
+            v-else-if="pdfSource"
+            class="transform-wrapper"
+            :style="{
+              transform: `translate(${panX}px, ${panY}px) scale(${zoomLevel})`,
+              transformOrigin: 'top center',
+              transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+            }"
+          >
+            <VuePdfEmbed
+              :source="pdfSource"
+              @loaded="handleDocumentLoad"
+              @loading-failed="handleLoadingFailed"
+              class="pdf-viewer"
+            />
+
+            <!-- Search highlights overlay -->
+            <div
+              v-for="(highlight, index) in highlightPositions"
+              :key="`highlight-${index}`"
+              class="search-highlight"
+              :class="{ 'active-highlight': index === currentSearchIndex }"
+              :style="{
+                top: highlight.top + 'px',
+                left: highlight.left + 'px',
+                width: highlight.width + 'px',
+                height: highlight.height + 'px'
+              }"
+            />
+          </div>
+
+          <div v-else class="empty-state">
+            <p>No document loaded</p>
+          </div>
+        </div>
 
       <!-- Bottom Footer -->
       <div class="pdf-footer">
@@ -512,13 +569,33 @@ const handleRequestRange = async ({ start, end }) => {
 
 .pdf-container {
   flex: 1;
-  overflow-y: auto;
-  padding: var(--space-xl);
+  overflow-y: auto; /* Restore scroll by default */
+  padding: 0;
   position: relative;
   display: flex;
   flex-direction: column;
   background-color: var(--color-bg-alt);
+  cursor: default;
+}
+
+.pdf-container.can-drag {
+  cursor: grab;
+  overflow: hidden; /* Hide scrollbars only when zoomed in/panning */
+}
+
+.pdf-container.is-dragging {
+  cursor: grabbing;
+}
+
+.transform-wrapper {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 40px;
+  padding: var(--space-xl); /* Move padding here */
+  transition: transform 0.1s ease-out; /* Smooth pan */
+  will-change: transform;
 }
 
 .pdf-page {
@@ -570,10 +647,11 @@ const handleRequestRange = async ({ start, end }) => {
   right: 0;
   padding: var(--space-m) var(--space-xl);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   z-index: 10;
   pointer-events: none;
+  /* Removed full width background */
 }
 
 .pdf-footer > * {
@@ -585,6 +663,17 @@ const handleRequestRange = async ({ start, end }) => {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-xs);
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+  padding: 8px 12px;
+  border-radius: 20px; /* Adjusted for stacked layout */
+  box-shadow: var(--shadow-sm);
+}
+
+:global(body.dark-mode) .footer-left {
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .zoom-controls {

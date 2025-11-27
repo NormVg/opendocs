@@ -1,6 +1,6 @@
 <script setup>
-import { ref } from 'vue'
-import { ChevronLeft, ChevronRight, Search, Bookmark, Sparkles, X } from 'lucide-vue-next'
+import { ref, onMounted } from 'vue'
+import { ChevronLeft, ChevronRight, Search, Bookmark, Sparkles, X, Sun, Moon } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 
 const props = defineProps({
@@ -39,6 +39,7 @@ const emit = defineEmits(['search', 'next-result', 'previous-result', 'toggle-bo
 const router = useRouter()
 const isSearchOpen = ref(false)
 const searchQuery = ref('')
+const isDarkMode = ref(false)
 
 const goBack = () => {
   router.back()
@@ -55,6 +56,32 @@ const toggleSearch = () => {
 const handleSearch = () => {
   emit('search', searchQuery.value)
 }
+
+const toggleDarkMode = () => {
+  isDarkMode.value = !isDarkMode.value
+  if (isDarkMode.value) {
+    document.body.classList.add('dark-mode')
+    localStorage.setItem('darkMode', 'true')
+  } else {
+    document.body.classList.remove('dark-mode')
+    localStorage.setItem('darkMode', 'false')
+  }
+}
+
+onMounted(() => {
+  const savedMode = localStorage.getItem('darkMode')
+  if (savedMode === 'true') {
+    isDarkMode.value = true
+    document.body.classList.add('dark-mode')
+  } else if (savedMode === 'false') {
+    isDarkMode.value = false
+    document.body.classList.remove('dark-mode')
+  } else {
+    if (document.body.classList.contains('dark-mode')) {
+      isDarkMode.value = true
+    }
+  }
+})
 </script>
 
 <template>
@@ -101,6 +128,10 @@ const handleSearch = () => {
         </button>
         <button class="icon-btn" @click="$emit('toggle-ai-chat')" :class="{ active: isAiChatOpen }">
           <Sparkles :size="18" :fill="isAiChatOpen ? 'currentColor' : 'none'" />
+        </button>
+        <button class="icon-btn" @click="toggleDarkMode">
+          <Sun v-if="isDarkMode" :size="18" />
+          <Moon v-else :size="18" />
         </button>
         <button class="icon-btn" @click="toggleSearch">
           <Search :size="18" />
