@@ -5,8 +5,8 @@ import { electronAPI } from '@electron-toolkit/preload'
 const api = {
   openFile: () => ipcRenderer.invoke('open-file'),
   readPdfFile: (filePath) => ipcRenderer.invoke('read-pdf-file', filePath),
-  streamChat: (messages, apiKey, context, filePath, onChunk, onDone, onError) => {
-    ipcRenderer.send('chat-stream', { messages, apiKey, context, filePath })
+  streamChat: (messages, apiKey, context, filePath, customInstructions, onChunk, onDone, onError) => {
+    ipcRenderer.send('chat-stream', { messages, apiKey, context, filePath, customInstructions })
 
     const chunkHandler = (_event, chunk) => onChunk(chunk)
     const doneHandler = () => {

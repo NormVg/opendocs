@@ -75,19 +75,25 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.on('chat-stream', async (event, { messages, apiKey, context, filePath, model }) => {
+  ipcMain.on('chat-stream', async (event, { messages, apiKey, context, filePath, model, customInstructions }) => {
     try {
       const { streamText } = require('ai')
       const { createGoogleGenerativeAI } = require('@ai-sdk/google')
       const fs = require('fs')
+
+      // Import prompts using ES6 dynamic import
+      const {
+        getSystemMessageWithContext,
+        getDefaultSystemMessage
+      } = await import('./prompts.js')
 
       const google = createGoogleGenerativeAI({
         apiKey: apiKey
       })
 
       const systemMessage = context
-        ? `You are a helpful AI assistant. You have access to the following document context:\n\n${context}\n\nAnswer the user's question based on this context if relevant.`
-        : 'You are a helpful AI assistant.'
+        ? getSystemMessageWithContext(context, customInstructions)
+        : getDefaultSystemMessage()
 
       // Prepare messages with file if available
       let finalMessages = [...messages]
@@ -142,20 +148,8 @@ app.whenReady().then(() => {
     } catch (error) {
       console.error('Chat stream error:', error)
 
-      let userFriendlyMessage = 'An error occurred while processing your request.'
-
-      // Handle specific error types
-      if (error.message?.includes('API key')) {
-        userFriendlyMessage = 'Invalid or missing API key. Please check your Gemini API key in Settings.'
-      } else if (error.message?.includes('quota') || error.message?.includes('rate limit')) {
-        userFriendlyMessage = 'API quota exceeded or rate limit reached. Please try again later.'
-      } else if (error.message?.includes('network') || error.message?.includes('ENOTFOUND')) {
-        userFriendlyMessage = 'Network error. Please check your internet connection and try again.'
-      } else if (error.message?.includes('timeout')) {
-        userFriendlyMessage = 'Request timed out. The model might be temporarily unavailable.'
-      } else if (error.message) {
-        userFriendlyMessage = `Error: ${error.message}`
-      }
+      const { getUserFriendlyErrorMessage } = await import('./prompts.js')
+      const userFriendlyMessage = getUserFriendlyErrorMessage(error)
 
       event.sender.send('chat-error', userFriendlyMessage)
     }

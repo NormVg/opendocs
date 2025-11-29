@@ -6,6 +6,7 @@ import { ChevronLeft, Moon, Sun, Key, Trash2, Info, Plus, Server } from 'lucide-
 const router = useRouter()
 const isDarkMode = ref(false)
 const apiKey = ref('')
+const customInstructions = ref('')
 const appVersion = '1.0.0'
 
 // Model Management
@@ -32,6 +33,12 @@ onMounted(() => {
   const savedKey = localStorage.getItem('gemini_api_key')
   if (savedKey) {
     apiKey.value = savedKey
+  }
+
+  // Load custom instructions
+  const savedInstructions = localStorage.getItem('custom_instructions')
+  if (savedInstructions) {
+    customInstructions.value = savedInstructions
   }
 
   // Load Models
@@ -86,6 +93,10 @@ const toggleDarkMode = () => {
 const saveApiKey = () => {
   localStorage.setItem('gemini_api_key', apiKey.value)
   // Optional: Show a toast or feedback
+}
+
+const saveCustomInstructions = () => {
+  localStorage.setItem('custom_instructions', customInstructions.value)
 }
 
 const clearHistory = () => {
@@ -147,6 +158,27 @@ const clearHistory = () => {
               placeholder="AIza..."
               class="settings-input"
             />
+          </div>
+        </div>
+
+        <div class="setting-item column">
+          <div class="setting-info">
+            <div class="icon-wrapper">
+              <Server :size="20" />
+            </div>
+            <div class="text-wrapper">
+              <span class="setting-label">Custom Instructions</span>
+              <span class="setting-desc">Add custom behavior instructions for the AI (optional)</span>
+            </div>
+          </div>
+          <div class="input-wrapper">
+            <textarea
+              v-model="customInstructions"
+              @input="saveCustomInstructions"
+              placeholder="e.g., Always respond in a formal tone, prioritize code examples, etc."
+              class="settings-textarea"
+              rows="4"
+            ></textarea>
           </div>
         </div>
       </section>
@@ -396,17 +428,38 @@ const clearHistory = () => {
 .settings-input {
   width: 100%;
   padding: 10px 12px;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background-color: var(--color-bg-alt);
-  border: 1px solid transparent;
+  background: var(--color-bg-secondary);
   color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
+  font-size: 13px;
   transition: all var(--transition-fast);
 }
 
 .settings-input:focus {
-  background-color: var(--color-bg);
-  border-color: var(--color-text-secondary);
+  outline: none;
+  border-color: var(--color-primary);
+  background: var(--color-bg-primary);
+}
+
+.settings-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+  transition: all var(--transition-fast);
+}
+
+.settings-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  background: var(--color-bg-primary);
 }
 
 /* Buttons */

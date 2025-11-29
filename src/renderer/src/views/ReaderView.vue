@@ -328,7 +328,48 @@ watch(zoomLevel, (newZoom) => {
   }
 })
 
+// Watch for page changes and update dynamic current page context
+watch(currentPage, async (newPage) => {
+  if (!pdfDocument.value || !aiSidebar.value) return
+
+  // Check if there's a dynamic current page context
+  const dynamicContext = aiSidebar.value.contextItems?.find(item => item.isDynamic && item.type === 'page')
+
+  if (dynamicContext) {
+    // Update the label and content with new page
+    const text = await extractTextFromPage(pdfDocument.value, newPage)
+    dynamicContext.label = `Current Page (${newPage})`
+    dynamicContext.content = text
+  }
+})
+
 const handleRequestCurrentPage = async () => {
+  if (!pdfDocument.value) return
+
+  const pageNum = currentPage.value
+  const text = await extractTextFromPage(pdfDocument.value, pageNum)
+
+  if (aiSidebar.value) {
+    // Check if a dynamic current page context already exists
+    const existingDynamic = aiSidebar.value.contextItems?.find(item => item.isDynamic && item.type === 'page')
+
+    if (existingDynamic) {
+      // Update existing dynamic context
+      existingDynamic.label = `Current Page (${pageNum})`
+      existingDynamic.content = text
+    } else {
+      // Add new dynamic current page context
+      aiSidebar.value.addContextItem({
+        type: 'page',
+        label: `Current Page (${pageNum})`,
+        content: text,
+        isDynamic: true
+      })
+    }
+  }
+}
+
+const handleRequestThisPage = async () => {
   if (!pdfDocument.value) return
 
   const pageNum = currentPage.value
@@ -338,7 +379,8 @@ const handleRequestCurrentPage = async () => {
     aiSidebar.value.addContextItem({
       type: 'page',
       label: `Page ${pageNum}`,
-      content: text
+      content: text,
+      isDynamic: false
     })
   }
 }
@@ -425,6 +467,7 @@ const handleOpenFile = (path) => {
       :file-path="currentFilePath"
       @close="toggleAiChat"
       @request-context-current="handleRequestCurrentPage"
+      @request-context-this="handleRequestThisPage"
       @request-context-range="handleRequestRange"
       @request-context-full="handleRequestFullPdf"
       ref="aiSidebar"

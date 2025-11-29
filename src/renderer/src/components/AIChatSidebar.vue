@@ -149,6 +149,11 @@ const requestCurrentPage = () => {
   showContextMenu.value = false
 }
 
+const requestThisPage = () => {
+  emit('request-context-this')
+  showContextMenu.value = false
+}
+
 const showRangeUI = () => {
   showRangeInput.value = true
 }
@@ -187,7 +192,7 @@ const removeContextItem = (id) => {
   contextItems.value = contextItems.value.filter(i => i.id !== id)
 }
 
-defineExpose({ addContextItem })
+defineExpose({ addContextItem, contextItems })
 
 const replyToMessage = (content) => {
   addContextItem({
@@ -221,7 +226,7 @@ const stopResize = () => {
 }
 
 // Chat logic
-const sendMessage = () => {
+const sendMessage = async () => {
   if (!inputQuery.value.trim() && contextItems.value.length === 0) return
 
   const apiKey = localStorage.getItem('gemini_api_key')
@@ -235,9 +240,22 @@ const sendMessage = () => {
     return
   }
 
-  // Prepare context string
-  const contextString = contextItems.value.map(item => `[${item.label}]: ${item.content}`).join('\n\n')
+  // Build context string from context items
+  let contextString = ''
+  if (contextItems.value.length > 0) {
+    // Check if we have a dynamic current page context
+    const dynamicCurrentPage = contextItems.value.find(item => item.isDynamic && item.type === 'page')
 
+    if (dynamicCurrentPage) {
+      // Request fresh current page content
+      emit('request-context-current')
+
+      // Wait a bit for the context to be updated
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+
+    contextString = contextItems.value.map(item => item.content).join('\n\n')
+  }
   // Add user message
   const userMsgId = Date.now()
   messages.value.push({
@@ -270,12 +288,16 @@ const sendMessage = () => {
       content: m.content
     }))
 
+  // Get custom instructions from localStorage
+  const customInstructions = localStorage.getItem('custom_instructions') || ''
+
   // Start stream
   window.api.streamChat(
     apiMessages,
     apiKey,
     contextString,
     props.filePath,
+    customInstructions,
     (chunk) => {
       const aiMsg = messages.value.find(m => m.id === aiMsgId)
       if (aiMsg) {
@@ -418,7 +440,13 @@ watch(() => props.visible, (newVal) => {
 
     <!-- Messages Area -->
     <div v-else class="messages-area" ref="messagesContainer">
-      <div v-for="msg in messages" :key="msg.id" class="message-wrapper" :class="msg.role">
+      <div
+        v-for="msg in messages"
+        :key="msg.id"
+        :data-msg-id="msg.id"
+        class="message-wrapper"
+        :class="{ user: msg.role === 'user' }"
+      >
         <!-- User Message -->
         <div v-if="msg.role === 'user'" class="user-bubble">
           <div v-if="msg.context && msg.context.length > 0" class="message-context-chips">
@@ -484,7 +512,11 @@ watch(() => props.visible, (newVal) => {
                     <FileText :size="16" />
                     <span>Current Page</span>
                   </button>
-                  <button class="menu-item" @click="requestRange">
+                  <button class="menu-item" @click="requestThisPage">
+                    <FileText :size="16" />
+                    <span>This Page</span>
+                  </button>
+                  <button class="menu-item" @click="showRangeUI">
                     <Hash :size="16" />
                     <span>Page Range...</span>
                   </button>
@@ -737,6 +769,29 @@ watch(() => props.visible, (newVal) => {
   align-items: flex-end;
 }
 
+.user.ai-bubble {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--color-text-primary);
+  padding: 12px 16px;
+  border-radius: 20px;
+  border-bottom-left-radius: 4px;
+  max-width: 85%;
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+  animation: fadeInMessage 0.3s ease-out;
+}
+
+@keyframes fadeInMessage {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .user-bubble {
   background-color: var(--color-bg-hover);
   color: var(--color-text-primary);
@@ -777,6 +832,18 @@ watch(() => props.visible, (newVal) => {
   color: var(--color-text-primary);
   font-size: var(--font-size-base);
   line-height: 1.6;
+  animation: fadeInMessage 0.4s ease-out;
+}
+
+@keyframes fadeInMessage {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .ai-message.streaming .markdown-content::after {
@@ -805,6 +872,7 @@ watch(() => props.visible, (newVal) => {
   overflow-x: auto;
   color: #abb2bf;
 }
+
 
 .markdown-content :deep(p) {
   margin-bottom: 1em;
