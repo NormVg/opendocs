@@ -1,12 +1,12 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
 const api = {
   openFile: () => ipcRenderer.invoke('open-file'),
   readPdfFile: (filePath) => ipcRenderer.invoke('read-pdf-file', filePath),
-  streamChat: (messages, apiKey, context, filePath, customInstructions, onChunk, onDone, onError) => {
-    ipcRenderer.send('chat-stream', { messages, apiKey, context, filePath, customInstructions })
+  streamChat: (messages, apiKey, context, filePath, model, customInstructions, onChunk, onDone, onError) => {
+    ipcRenderer.send('chat-stream', { messages, apiKey, context, filePath, model, customInstructions })
 
     const chunkHandler = (_event, chunk) => onChunk(chunk)
     const doneHandler = () => {
@@ -31,6 +31,9 @@ const api = {
       ipcRenderer.removeListener('chat-done', doneHandler)
       ipcRenderer.removeListener('chat-error', errorHandler)
     }
+  },
+  getPathForFile: (file) => {
+    return webUtils.getPathForFile(file)
   }
 }
 

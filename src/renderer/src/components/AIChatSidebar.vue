@@ -247,22 +247,30 @@ const sendMessage = async () => {
     const dynamicCurrentPage = contextItems.value.find(item => item.isDynamic && item.type === 'page')
 
     if (dynamicCurrentPage) {
-      // Request fresh current page content
-      emit('request-context-current')
-
-      // Wait a bit for the context to be updated
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // Request fresh current page content and wait for it to complete
+      await new Promise(resolve => {
+        emit('request-context-current', resolve)
+        // Fallback timeout in case parent doesn't call back
+        setTimeout(resolve, 2000)
+      })
     }
 
     contextString = contextItems.value.map(item => item.content).join('\n\n')
+    console.log('--- Full Prompt Context ---')
+    console.log(contextString)
+    console.log('---------------------------')
   }
   // Add user message
   const userMsgId = Date.now()
+
+  // Deep copy context items to prevent mutation in history
+  const contextSnapshot = contextItems.value.map(item => ({ ...item }))
+
   messages.value.push({
     id: userMsgId,
     role: 'user',
     content: inputQuery.value,
-    context: [...contextItems.value]
+    context: contextSnapshot
   })
 
   const userContent = inputQuery.value
@@ -297,6 +305,7 @@ const sendMessage = async () => {
     apiKey,
     contextString,
     props.filePath,
+    selectedModel.value,
     customInstructions,
     (chunk) => {
       const aiMsg = messages.value.find(m => m.id === aiMsgId)

@@ -129,6 +129,13 @@ app.whenReady().then(() => {
         }
       }
 
+      console.log('--- Chat Request ---')
+      console.log('Model:', model || 'gemini-2.0-flash-lite (default)')
+      console.log('File:', filePath ? 'Yes' : 'No')
+      console.log('Context Length:', context ? context.length : 0)
+      console.log('Messages:', finalMessages.length)
+      console.log('--------------------')
+
       const result = await streamText({
         model: google(model || 'gemini-2.0-flash-lite'),
         system: systemMessage,

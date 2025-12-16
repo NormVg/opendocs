@@ -343,11 +343,18 @@ watch(currentPage, async (newPage) => {
   }
 })
 
-const handleRequestCurrentPage = async () => {
-  if (!pdfDocument.value) return
+const handleRequestCurrentPage = async (callback) => {
+  if (!pdfDocument.value) {
+    if (typeof callback === 'function') callback()
+    return
+  }
 
   const pageNum = currentPage.value
   const text = await extractTextFromPage(pdfDocument.value, pageNum)
+
+  if (!text || text.trim().length === 0) {
+    console.warn('Extracted text is empty for page', pageNum)
+  }
 
   if (aiSidebar.value) {
     // Check if a dynamic current page context already exists
@@ -367,6 +374,8 @@ const handleRequestCurrentPage = async () => {
       })
     }
   }
+
+  if (typeof callback === 'function') callback()
 }
 
 const handleRequestThisPage = async () => {

@@ -270,12 +270,12 @@ onMounted(() => {
 
 <style scoped>
 .library-container {
-  height: 100vh;
+  height: calc(100vh - 80px); /* Reduce height to account for footer */
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
-  padding: var(--space-jumbo); /* Increased for very large whitespace */
+  padding: var(--space-jumbo) var(--space-jumbo) 0; /* Remove bottom padding, keep top and sides */
   max-width: 900px; /* Slightly wider to breathe */
   margin: 0 auto;
   width: 100%;
@@ -310,17 +310,47 @@ onMounted(() => {
   width: 100%;
   display: flex;
   flex-direction: column;
-  margin-bottom: var(--space-jumbo); /* Space for footer visual balance */
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 120px; /* Increased space for the fixed footer */
+  padding-right: var(--space-m); /* Prevent scrollbar overlap with arrows */
+
+  /* Firefox scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+.doc-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.doc-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.doc-list::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 4px;
+}
+
+.doc-list::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-text-tertiary);
 }
 
 .library-footer {
-  position: absolute;
+  position: fixed;
   bottom: var(--space-xl);
-  left: var(--space-xl);
-  right: var(--space-xl);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 900px;
+  width: calc(100% - var(--space-xl) * 2);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background-color: var(--color-bg);
+  padding: var(--space-m) 0;
+  z-index: 10;
 }
 
 .text-btn {
@@ -406,14 +436,6 @@ onMounted(() => {
 .close-search-btn:hover {
   color: var(--color-text-primary);
   background-color: var(--color-bg-hover);
-}
-
-.doc-list {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  margin-bottom: var(--space-jumbo);
-  transition: opacity var(--transition-normal);
 }
 
 .doc-list.search-active {
